@@ -14,62 +14,71 @@ class GameEngine:
         self.day = DAY_COUNT
 
         #rnadom position for the user
-        self.player_pos = [random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)]
+        self.player_pos = [GRID_SIZE // 2, GRID_SIZE // 2]
 
         # random trees - excluding the player
         num_trees = int(TREE_DENSITY * GRID_SIZE * GRID_SIZE)
+        #num_trees = 2
         self.trees = self.random_positions(num_trees, exclude=tuple(self.player_pos))
+        #self.trees = self.random_positions(num_trees, exclude=tuple(self.player_pos), fixed_positions=[(4, 5), (4, 1)])
 
         # random lions - excluding the player and trees
         num_lions = int(LION_DENSITY * GRID_SIZE * GRID_SIZE)
+        #num_lions = 5
         self.lions = self.random_positions(num_lions, exclude=self.trees | {tuple(self.player_pos)})
+        #self.lions = self.random_positions(num_lions, exclude=self.trees | {tuple(self.player_pos)}, fixed_positions=[(5, 4), (6, 5), (5, 6), (4, 4), (3, 5)])
+
+        self.visible = -1 * np.ones((GRID_SIZE, GRID_SIZE))
+        self.check_visibility()
 
         return self.get_state()
 
     def get_state(self):
-        state = np.zeros((GRID_SIZE, GRID_SIZE))
-
+        state = self.visible
         state[self.player_pos[0], self.player_pos[1]] = PLAYER_VALUE
-        #print(f"DEBUG: self.trees = {self.trees}, Type: {type(self.trees)}")
-        for x, y in self.trees:
-            state[x, y] = TREE_VALUE
-
-        for x, y in self.lions:
-            state[x, y] = LION_VALUE
-
         return np.append(state.flatten(), [self.energy, self.day])
 
-    def all_valid_actions(self):
-        actions = []
-        for i in [UP, DOWN, LEFT, RIGHT]:
-            if self.valid_action(i):
-                actions.append(i)
-        return actions
+    def check_visibility(self):
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for x, y in directions:
+            if self.player_pos[0] + x < 0:
+                x = GRID_SIZE - 1
+            elif self.player_pos[0] + x > GRID_SIZE - 1:
+                x = -1 * (GRID_SIZE - 1)
+            if self.player_pos[1] + y < 0:
+                y = GRID_SIZE - 1
+            elif self.player_pos[1] + y > GRID_SIZE - 1:
+                y = -1 * (GRID_SIZE - 1)
 
-    def valid_action(self, action):
-        x, y = self.player_pos
-        if action == UP and x == 0:
-            return False
-        elif action == DOWN and x == GRID_SIZE-1:
-            return False
-        elif action == LEFT and y == 0:
-            return False
-        elif action == RIGHT and y == GRID_SIZE-1:
-            return False
-        else:
-            return True
+            if (self.player_pos[0] + x, self.player_pos[1] + y) in self.trees:
+                self.visible[self.player_pos[0] + x][self.player_pos[1] + y] = TREE_VALUE
+            elif (self.player_pos[0] + x, self.player_pos[1] + y) in self.lions:
+                self.visible[self.player_pos[0] + x][self.player_pos[1] + y] = LION_VALUE
+            else :
+                self.visible[self.player_pos[0] + x][self.player_pos[1] + y] = 0
+
+    def refog(self):
+        self.visible[self.visible == 0] = -1
 
     def step(self, action):
         x, y = self.player_pos
 
         if action == UP:
             x = x - 1
+            if x < 0:
+                x = GRID_SIZE-1
         elif action == DOWN:
             x = x + 1
+            if x >= GRID_SIZE:
+                x = 0
         elif action == LEFT:
             y = y - 1
+            if y < 0:
+                y = GRID_SIZE-1
         elif action == RIGHT:
             y = y + 1
+            if y >= GRID_SIZE:
+                y = 0
 
         reward = 0
         done = False
@@ -77,28 +86,24 @@ class GameEngine:
         self.day = self.day + 1
         self.energy = self.energy - 1
 
-        # invalid move
-        if (x < 0 or x >= GRID_SIZE or y < 0 or y >= GRID_SIZE):
-            reward = INVALID_MOVE_VALUE
-            done = True
-        else:
-            is_lion = False
-            is_tree = False
+        is_lion = False
+        is_tree = False
 
-            if (tuple([x, y]) in self.lions):
-                is_lion = True
+        if (tuple([x, y]) in self.lions):
+            is_lion = True
 
-            if (tuple([x, y]) in self.trees):
-                is_tree = True
-                self.trees.remove(tuple([x, y]) )
-                # hacky, next(iter gets the first touple element
-                new_tree_pos = next(iter(self.random_positions(1, exclude=self.trees | self.lions | {tuple([x, y])})))
-                self.trees.add(new_tree_pos)
-                self.energy += ENERGY_FROM_TREE
+        if (tuple([x, y]) in self.trees):
+            is_tree = True
+            self.trees.remove(tuple([x, y]) )
+            # hacky, next(iter gets the first touple element
+            new_tree_pos = next(iter(self.random_positions(1, exclude=self.trees | self.lions | {tuple([x, y])})))
+            self.trees.add(new_tree_pos)
+            self.energy += ENERGY_FROM_TREE
+            self.refog()
 
-            reward, done = self.get_score(is_lion, is_tree)
-            self.player_pos = [x, y]
-
+        reward, done = self.get_score(is_lion, is_tree)
+        self.player_pos = [x, y]
+        self.check_visibility()
         return self.get_state(), reward, done
 
     def get_score(self, is_lion, is_tree):
@@ -106,20 +111,27 @@ class GameEngine:
         done = False
 
         if self.energy <= 0:
+            reward += self.day * DAY_RATIO
+            if self.day == 10:
+                reward -= 100
             done = True
 
         if is_lion:
             reward += MEETING_WITH_A_LION_VALUE
+            reward += self.day * DAY_RATIO
             done = True
 
         if is_tree:
+            reward += EATING_TREE_VALUE
             done = False
 
-        reward = reward + DAY_RATIO * self.day + ENERGY_RATIO * self.energy
+        #reward = reward + DAY_RATIO * self.day + ENERGY_RATIO * self.energy
 
         return reward, done
 
-    def random_positions(self, count, exclude):
+    def random_positions(self, count, exclude, fixed_positions=None):
+        if fixed_positions:
+            return set(fixed_positions)
         positions = set()
         while len(positions) < count:
             pos = (random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1))

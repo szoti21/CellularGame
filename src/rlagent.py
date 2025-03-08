@@ -28,16 +28,12 @@ class Agent:
         if LOAD_MODEL and os.path.exists(MODEL_PATH):
             self.load_model()
 
-    def select_action(self, state, available_actions):
+    def select_action(self, state):
         if random.random() < self.epsilon:
-            return random.choice(available_actions)
+            return random.randint(0, NUMBER_OF_OUTPUTS - 1)
 
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
         with torch.no_grad():
-            actions = torch.argsort(self.model(state), stable=True, descending=True)[0]
-            for action in actions:
-                if action in available_actions:
-                    return action
             return torch.argmax(self.model(state)).item()
 
     def store_experience(self, state, action, reward, next_state, done):

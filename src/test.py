@@ -35,15 +35,9 @@ def solve_game():
 
 
         # Get the best action from Q-values
-        available_actions = env.all_valid_actions()
         with torch.no_grad():
-            moves = torch.argsort(model(state_tensor), stable=True, descending=True)[0]
-            for move in moves:
-                if move in available_actions:
-                    action = move
-                    break
-            if action is None:
-                action = torch.argmax(model(state_tensor)).item()
+            print(model(state_tensor))
+            action = torch.argmax(model(state_tensor)).item()
 
         # Take action in environment
         state, _, done = env.step(action)
@@ -52,7 +46,7 @@ def solve_game():
         path.append(env.player_pos.copy())
         step_count += 1
 
-        print(f"\n🔹 Step {step_count}: Agent moved {['Up', 'Down', 'Left', 'Right'][action]}")
+        #print(f"\n🔹 Step {step_count}: Agent moved {['Up', 'Down', 'Left', 'Right'][action]}")
         env.print_grid()
         time.sleep(0.5)  # Pause for visibility
 

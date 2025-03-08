@@ -14,6 +14,7 @@ AGENT_COLOR = (0, 0, 255)  # Blue
 TREE_COLOR = (0, 255, 0)  # Green
 LION_COLOR = (255, 165, 0)  # Orange
 LINE_COLOR = (0, 0, 0)  # Black
+FOG_COLOR = (50, 50, 50, 150)  # Gray with some transparency
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -44,6 +45,15 @@ def draw_grid(env):
     pygame.draw.rect(screen, AGENT_COLOR,
                      (agent_y * CELL_SIZE, agent_x * CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
+    # Draw fog of war over unseen cells
+    fog_surface = pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)
+    fog_surface.fill(FOG_COLOR)
+
+    for row in range(len(env.visible)):
+        for col in range(len(env.visible[row])):
+            if env.visible[row][col] == -1:
+                screen.blit(fog_surface, (col * CELL_SIZE, row * CELL_SIZE))
+
     pygame.display.flip()
 def test_play():
     env = GameEngine()
@@ -69,15 +79,8 @@ def test_play():
 
         # Get the best action from Q-values
         # Get the best action from Q-values
-        available_actions = env.all_valid_actions()
         with torch.no_grad():
-            moves = torch.argsort(model(state_tensor), stable=True, descending=True)[0]
-            for move in moves:
-                if move in available_actions:
-                    action = move
-                    break
-            if action is None:
-                action = torch.argmax(model(state_tensor)).item()
+            action = torch.argmax(model(state_tensor)).item()
 
         # Take action in environment
         state, score, done = env.step(action)

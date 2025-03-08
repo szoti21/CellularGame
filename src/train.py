@@ -15,7 +15,7 @@ def train_agent():
         done = False
 
         while not done:
-            action = agent.select_action(state, env.all_valid_actions())
+            action = agent.select_action(state)
             next_state, reward, done = env.step(action)
             agent.store_experience(state, action, reward, next_state, done)
             state = next_state
